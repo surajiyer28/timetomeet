@@ -1,0 +1,5 @@
+fastmcp>=2.3.4
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+pydantic-settings>=2.6.1
+httpx>=0.28.1

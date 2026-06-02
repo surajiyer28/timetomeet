@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: timetomeet
+      POSTGRES_USER: timetomeet
+      POSTGRES_PASSWORD: timetomeet
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U timetomeet"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"  # web UI
+      - "1025:1025"  # SMTP
+
+  mcp-server:
+    build: ./mcp-server
+    ports:
+      - "8001:8001"
+    env_file: ./mcp-server/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    build: ./backend
+    ports:
+      - "8080:8080"
+    env_file: ./backend/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mcp-server:
+        condition: service_started
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    env_file: ./frontend/.env.local
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
