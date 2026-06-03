@@ -85,8 +85,8 @@ directly. Every action is an MCP tool call, and each tool is scoped to the calli
 | Auth | Email/password, JWT (python-jose + passlib/bcrypt) |
 | Real-time | FastAPI WebSockets |
 | Voice | Web Speech API (STT) + SpeechSynthesis (TTS), browser-side |
-| Email | SMTP (Mailpit for local dev) |
-| Calendar | Stubbed — bookings live in the DB (Google Calendar is a planned milestone) |
+| Email | SMTP (Mailpit for local dev; real Gmail/STARTTLS when configured) |
+| Calendar | Google Calendar via per-user OAuth — real free/busy + event creation; falls back to DB-only when a user hasn't connected |
 
 ---
 
@@ -146,6 +146,28 @@ Services:
 Sign up two or more users (each in their own browser/profile so they have separate sessions),
 set availability under the settings drawer, then tell your agent who you'd like to meet —
 e.g. *"set up a 30 minute sync with @bob on Thursday afternoon."*
+
+### (Optional) connect Google Calendar
+
+Set `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in `backend/.env` (Web OAuth client, redirect
+URI `http://localhost:8080/auth/google/callback`, Calendar API enabled). A **Connect Google
+Calendar** option then appears in the settings drawer. Once connected, availability is
+intersected with the user's real free/busy and confirmed meetings are written to their calendar.
+
+---
+
+## Testing / evaluation
+
+`backend/eval/run_eval.py` runs real end-to-end negotiations and independently verifies the
+results from the database — catching hallucinated slots, checking timing-constraint adherence
+and preference accuracy, and confirming the agents escalate (rather than invent a time) when no
+overlap exists:
+
+```bash
+docker-compose run --rm backend python -m eval.run_eval
+```
+
+See **[SOLUTION.md](SOLUTION.md)** for the full solution narrative and design rationale.
 
 ---
 

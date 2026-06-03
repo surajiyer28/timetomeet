@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.routers import auth, users, availability, sessions, bookings, feed
+from app.routers import auth, users, availability, sessions, bookings, feed, google
 from app.websocket.router import router as ws_router
 from app.websocket.manager import manager
 from app.schemas.models import BroadcastPayload
@@ -26,6 +26,7 @@ app.include_router(availability.router)
 app.include_router(sessions.router)
 app.include_router(bookings.router)
 app.include_router(feed.router)
+app.include_router(google.router)
 app.include_router(ws_router)
 
 

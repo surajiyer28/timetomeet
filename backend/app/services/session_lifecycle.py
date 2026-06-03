@@ -20,6 +20,33 @@ async def _participant_ids(db, session_id: str) -> list[str]:
     return [str(r["user_id"]) for r in rows.mappings()]
 
 
+async def _create_calendar_events(booking_id, title, start, end, email_rows) -> None:
+    """Best-effort: create a Google Calendar event on each connected participant's calendar,
+    inviting the others. Stores the first created event id on the booking. No-op if Google is
+    unconfigured or nobody connected — the DB booking is still the source of truth."""
+    from app.config import settings
+    if not settings.google_enabled:
+        return
+    from app import google_calendar as gcal
+
+    invite_emails = [r["google_email"] or r["email"] for r in email_rows]
+    first_event_id = None
+    for r in email_rows:
+        if not r["google_email"]:
+            continue  # this participant hasn't connected Google
+        others = [e for e in invite_emails if e and e != (r["google_email"] or r["email"])]
+        event_id = await gcal.create_event(str(r["id"]), title, start, end, others)
+        first_event_id = first_event_id or event_id
+
+    if first_event_id:
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                text("UPDATE bookings SET calendar_event_id = :eid WHERE id = :bid"),
+                {"eid": first_event_id, "bid": booking_id},
+            )
+            await db.commit()
+
+
 async def create_meeting(
     initiator_id: str,
     participant_usernames: list[str],
@@ -206,7 +233,22 @@ async def confirm_and_book(session_id: str) -> str | None:
             text("UPDATE scheduling_sessions SET status = 'CONFIRMED', updated_at = :now WHERE id = :id"),
             {"now": now, "id": session_id},
         )
+        # Emails for calendar invites: prefer the connected Google address, else the account email.
+        email_rows = (await db.execute(
+            text("""
+                SELECT u.id, u.email, g.google_email
+                FROM users u LEFT JOIN google_tokens g ON g.user_id = u.id
+                WHERE u.id = ANY(:ids)
+            """),
+            {"ids": participant_ids},
+        )).mappings().all()
         await db.commit()
+
+    # Write a real Google Calendar event on each connected participant's calendar (best effort).
+    await _create_calendar_events(
+        booking_id, sess["purpose"] or "Meeting",
+        sess["proposed_start"], sess["proposed_end"], email_rows,
+    )
 
     await manager.broadcast_to_users(participant_ids, {
         "type": "CONFIRMED", "session_id": session_id, "booking_id": booking_id,

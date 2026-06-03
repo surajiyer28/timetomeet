@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiFetch } from '@/lib/api';
-import { clearAuth } from '@/lib/auth';
+import { apiFetch, getGoogleStatus, disconnectGoogle, googleConnectUrl, type GoogleStatus } from '@/lib/api';
+import { clearAuth, getToken } from '@/lib/auth';
 import { wsClient } from '@/lib/websocket';
 import AvailabilityGrid from './AvailabilityGrid';
 
@@ -11,15 +11,22 @@ interface User { id: string; email: string; name: string; username: string; time
 export default function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
+  const [gcal, setGcal] = useState<GoogleStatus | null>(null);
 
   useEffect(() => {
     if (open && !user) apiFetch<User>('/users/me').then(setUser).catch(() => {});
+    if (open) getGoogleStatus().then(setGcal).catch(() => {});
   }, [open, user]);
 
   function signOut() {
     clearAuth();
     wsClient.disconnect();
     router.push('/auth/signin');
+  }
+
+  async function disconnectGcal() {
+    await disconnectGoogle().catch(() => {});
+    setGcal(await getGoogleStatus().catch(() => null));
   }
 
   return (
@@ -52,6 +59,32 @@ export default function SettingsDrawer({ open, onClose }: { open: boolean; onClo
                       <span className="text-sm font-medium text-slate-800">{value}</span>
                     </div>
                   )
+                )}
+              </div>
+            </section>
+          )}
+
+          {gcal?.configured && (
+            <section className="mb-7">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Calendar</h3>
+              <div className="rounded-xl border border-slate-200 px-4 py-3">
+                {gcal.connected ? (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium text-slate-800">Google Calendar connected</div>
+                      <div className="text-xs text-slate-500">{gcal.email}</div>
+                    </div>
+                    <button onClick={disconnectGcal}
+                      className="text-sm font-medium text-slate-500 hover:text-rose-600">Disconnect</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-slate-600">Use your real calendar for availability and events.</div>
+                    <a href={googleConnectUrl(getToken() ?? '')}
+                      className="ml-3 shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">
+                      Connect
+                    </a>
+                  </div>
                 )}
               </div>
             </section>

@@ -72,3 +72,18 @@ export interface Feed {
 }
 
 export const getFeed = () => apiFetch<Feed>('/feed');
+
+// --- Google Calendar ---
+
+export interface GoogleStatus {
+  connected: boolean;
+  email: string | null;
+  configured: boolean;
+}
+
+export const getGoogleStatus = () => apiFetch<GoogleStatus>('/users/me/google');
+export const disconnectGoogle = () => apiFetch('/users/me/google', { method: 'DELETE' });
+
+/** Full-page URL that begins the OAuth flow (carries the JWT as a query param). */
+export const googleConnectUrl = (token: string) =>
+  `${BASE}/auth/google/start?token=${encodeURIComponent(token)}`;

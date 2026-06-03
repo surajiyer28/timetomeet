@@ -1,8 +1,28 @@
 from datetime import datetime, timedelta, date as date_type
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+import httpx
 from sqlalchemy import text
 from database import AsyncSessionLocal
+from config import settings
 from context import caller_id
+
+
+async def _google_busy(user_id: str, day_start: datetime, day_end: datetime) -> list[tuple]:
+    """Ask the backend for the user's real Google busy blocks for the day. Returns [] when the
+    user hasn't connected Google or anything goes wrong — availability then stays DB-only."""
+    try:
+        async with httpx.AsyncClient(timeout=4.0) as client:
+            resp = await client.post(f"{settings.backend_url}/internal/freebusy", json={
+                "user_id": user_id,
+                "time_min": day_start.isoformat(),
+                "time_max": day_end.isoformat(),
+            })
+        data = resp.json()
+        if not data.get("connected"):
+            return []
+        return [(datetime.fromisoformat(s), datetime.fromisoformat(e)) for s, e in data.get("busy", [])]
+    except Exception:
+        return []
 
 # macOS / browser aliases not recognised by zoneinfo
 _TZ_ALIASES = {
@@ -81,11 +101,15 @@ async def check_my_availability(date: str, duration_minutes: int) -> dict:
         )
         busy_blocks = [(r["start_time"], r["end_time"]) for r in bookings_result.mappings()]
 
+        # Also subtract real Google Calendar busy blocks (best effort; degrades to DB-only).
+        busy_blocks += await _google_busy(user_id, day_start, day_end)
+
         # Generate 30-minute slots within availability window
         slot_start = datetime.combine(target_date, avail["start_time"]).replace(tzinfo=user_tz)
         avail_end = datetime.combine(target_date, avail["end_time"]).replace(tzinfo=user_tz)
         slot_duration = timedelta(minutes=duration_minutes)
         step = timedelta(minutes=30)
+        now = datetime.now(user_tz)  # don't offer slots that have already started today
 
         free_slots = []
         current = slot_start
@@ -95,7 +119,7 @@ async def check_my_availability(date: str, duration_minutes: int) -> dict:
                 not (slot_end <= busy_start or current >= busy_end)
                 for busy_start, busy_end in busy_blocks
             )
-            if not overlaps:
+            if not overlaps and current >= now:
                 free_slots.append(current.isoformat())
             current += step
 

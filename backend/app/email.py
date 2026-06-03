@@ -11,9 +11,11 @@ async def _send(to_addrs: list[str], subject: str, body_html: str) -> None:
         return
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = "TimeToMeet <noreply@timetomeet.local>"
+    msg["From"] = settings.smtp_from
     msg["To"] = ", ".join(to_addrs)
     msg.attach(MIMEText(body_html, "html"))
+    # Real SMTP relays (Gmail on 587) need STARTTLS + auth; Mailpit (1025) needs neither.
+    use_tls = bool(settings.smtp_user and settings.smtp_password)
     try:
         await aiosmtplib.send(
             msg,
@@ -21,7 +23,7 @@ async def _send(to_addrs: list[str], subject: str, body_html: str) -> None:
             port=settings.smtp_port,
             username=settings.smtp_user or None,
             password=settings.smtp_password or None,
-            start_tls=False,
+            start_tls=use_tls,
         )
     except Exception as e:
         print(f"[email] send failed: {e}")
