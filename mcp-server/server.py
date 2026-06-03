@@ -19,4 +19,5 @@ mcp.tool()(get_my_meeting_history)
 mcp.tool()(get_user_by_username)
 
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http", host="0.0.0.0", port=8001)
+    import os
+    mcp.run(transport="streamable-http", host="0.0.0.0", port=int(os.environ.get("PORT", 8001)))
